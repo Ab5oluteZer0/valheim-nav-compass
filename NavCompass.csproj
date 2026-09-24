@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AssemblyName>Mod6-NavCompass</AssemblyName>
+    <RootNamespace>Mod6_NavCompass</RootNamespace>
+
+    <!-- Ustaw sciezke do Valheim przez zmienna srodowiskowa VALHEIM_PATH,
+         albo nadpisz przy budowaniu: dotnet build -p:ValheimPath="D:\Games\Valheim" -->
+    <ValheimPath Condition="'$(ValheimPath)' == ''">$(VALHEIM_PATH)</ValheimPath>
+    <ValheimPath Condition="'$(ValheimPath)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Valheim</ValheimPath>
+    <ManagedPath>$(ValheimPath)\valheim_Data\Managed</ManagedPath>
+    <BepInExCorePath>$(ValheimPath)\BepInEx\core</BepInExCorePath>
+    <BepInExPluginsPath>$(ValheimPath)\BepInEx\plugins</BepInExPluginsPath>
+    <ModDeployPath>$(BepInExPluginsPath)\$(AssemblyName)\</ModDeployPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="assembly_valheim">
+      <HintPath>$(ManagedPath)\assembly_valheim.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="assembly_utils">
+      <HintPath>$(ManagedPath)\assembly_utils.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="assembly_guiutils">
+      <HintPath>$(ManagedPath)\assembly_guiutils.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(ManagedPath)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(ManagedPath)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(ManagedPath)\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(ManagedPath)\UnityEngine.UIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.JSONSerializeModule">
+      <HintPath>$(ManagedPath)\UnityEngine.JSONSerializeModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>$(ManagedPath)\Unity.TextMeshPro.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath>$(BepInExCorePath)\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BepInExCorePath)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Po zbudowaniu kopiuje DLL do BepInEx/plugins/<NazwaModa>/ dla szybkiego testowania w grze -->
+  <Target Name="DeployToBepInEx" AfterTargets="Build" Condition="Exists('$(BepInExPluginsPath)')">
+    <ItemGroup>
+      <DeployFiles Include="$(TargetDir)$(AssemblyName).dll" />
+    </ItemGroup>
+    <MakeDir Directories="$(ModDeployPath)" Condition="!Exists('$(ModDeployPath)')" />
+    <Copy SourceFiles="@(DeployFiles)" DestinationFolder="$(ModDeployPath)" SkipUnchangedFiles="false" />
+  </Target>
+
+</Project>

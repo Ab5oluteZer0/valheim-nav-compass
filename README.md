@@ -1,0 +1,75 @@
+# Valheim Nav Compass
+
+BepInEx mod for [Valheim](https://www.valheimgame.com/) that adds a
+scrolling compass strip to the top of the HUD, showing cardinal directions
+and the bearing/distance to map pins you've manually marked - like the
+navigation compass in many other open-world games. This is **not**
+auto-pathfinding, just a visual direction indicator.
+
+## How to use
+
+Open the map and click a pin to cycle its state:
+
+1. **Unmarked** (default)
+2. **Strikethrough** (the game's own built-in "checked" mark)
+3. **Circled** (a thin light-blue ring, added by this mod) - this pin now
+   shows up on the compass strip
+4. Click again -> back to unmarked
+
+Works on *any* pin, including ones the game places automatically (bosses,
+trader/shop markers, etc.) - not just ones you placed yourself. You can
+track multiple pins at once. Marked pins are saved per-world and survive a
+game restart.
+
+## Requirements
+
+- Valheim (tested on 1.0.15)
+- [BepInEx](https://valheim.thunderstore.io/package/denikson/BepInExPack_Valheim/) 5.4.x
+
+## Installation (players)
+
+1. Install BepInEx for Valheim if you haven't already (see link above, or
+   use [r2modman](https://valheim.thunderstore.io/package/ebkr/r2modman/)).
+2. Download `Mod6-NavCompass.dll` from the
+   [latest release](../../releases/latest).
+3. Drop it into `<Valheim install folder>\BepInEx\plugins\Mod6-NavCompass\`.
+4. Launch the game, mark a pin on the map, close the map.
+
+## Building from source
+
+Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download) (or newer)
+and a local Valheim install with BepInEx installed.
+
+```bash
+git clone https://github.com/Ab5oluteZer0/valheim-nav-compass.git
+cd valheim-nav-compass
+dotnet build -c Release -p:ValheimPath="C:\Path\To\Valheim"
+```
+
+If you don't pass `-p:ValheimPath`, the build looks for a `VALHEIM_PATH`
+environment variable, then falls back to the default Steam location
+(`C:\Program Files (x86)\Steam\steamapps\common\Valheim`).
+
+The build automatically copies the built DLL into
+`<Valheim>\BepInEx\plugins\Mod6-NavCompass\` for quick in-game testing.
+
+## Notes on how it works (and a few gotchas found along the way)
+
+- Pin marking does **not** reuse `Minimap.GetClosestPin` - that method
+  requires `pin.m_save == true`, which excludes non-saveable pins like
+  shop/trader markers. This mod re-implements the closest-pin lookup without
+  that restriction.
+- `PinData.m_checked` is the game's own field for the red "strikethrough"
+  look (not a checkmark, despite the name) and is toggled automatically on
+  every map click - this mod explicitly overwrites it after each click to
+  fit its own 3-state cycle.
+- Deleting a marked pin from the map (right-click -> remove) is detected
+  every frame and cleans up the mod's own tracking state, so it doesn't get
+  stuck showing a pin that no longer exists.
+- Any `Update()` loop that builds UI dynamically should be wrapped in a
+  try/catch with a "disable after first error" guard - an uncaught exception
+  thrown every frame floods the BepInEx log and tanks FPS by itself.
+
+## License
+
+MIT - see [LICENSE](LICENSE).
