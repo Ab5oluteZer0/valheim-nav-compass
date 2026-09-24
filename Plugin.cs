@@ -502,7 +502,9 @@ namespace Mod6_NavCompass
 
                 bool visible = PositionOnStrip(marker.Root, bearing, playerYaw);
                 marker.Root.gameObject.SetActive(visible);
-                marker.DistanceText.text = FormatDistance(distance);
+
+                string label = string.IsNullOrEmpty(pin.m_name) ? FormatDistance(distance) : $"{pin.m_name} {FormatDistance(distance)}";
+                marker.DistanceText.text = label;
             }
         }
 
@@ -528,21 +530,25 @@ namespace Mod6_NavCompass
             var distText = distGo.AddComponent<TextMeshProUGUI>();
             var font = GetFont();
             if (font != null) distText.font = font;
-            distText.fontSize = 9f;
+            distText.fontSize = 8f;
+            distText.enableAutoSizing = true;
+            distText.fontSizeMin = 5f;
+            distText.fontSizeMax = 8f;
             distText.alignment = TextAlignmentOptions.Center;
             distText.color = new Color(1f, 0.85f, 0.3f);
+            distText.overflowMode = TextOverflowModes.Ellipsis;
             var distRect = distGo.GetComponent<RectTransform>();
             distRect.anchorMin = new Vector2(0.5f, 0f);
             distRect.anchorMax = new Vector2(0.5f, 0f);
             distRect.pivot = new Vector2(0.5f, 0.5f);
-            distRect.sizeDelta = new Vector2(50f, 12f);
+            distRect.sizeDelta = new Vector2(110f, 12f);
             distRect.anchoredPosition = new Vector2(0f, -3f);
 
             var rt = go.GetComponent<RectTransform>();
             rt.anchorMin = new Vector2(0.5f, 0.5f);
             rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(50f, StripHeight);
+            rt.sizeDelta = new Vector2(110f, StripHeight);
 
             return new PinMarker { Root = rt, DistanceText = distText };
         }
