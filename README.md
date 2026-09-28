@@ -21,6 +21,15 @@ trader/shop markers, etc.) - not just ones you placed yourself. You can
 track multiple pins at once. Marked pins are saved per-world and survive a
 game restart.
 
+## Look
+
+The compass strip is styled to match the game's own UI: it sits in the same
+wooden frame as the in-game windows, and the main directions (N, E, S, W)
+are carved-wood letters in Valheim's Norse font (north is tinted red so it
+stands out). All of these graphics are taken from your installed game at
+runtime - the mod itself ships no game assets. If any of them can't be
+found, the compass falls back to a plain look instead of failing.
+
 ## Requirements
 
 - Valheim (tested on 1.0.15)

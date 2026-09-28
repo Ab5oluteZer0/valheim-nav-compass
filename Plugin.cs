@@ -30,11 +30,14 @@ namespace Mod6_NavCompass
     {
         public const string PluginGUID = "com.michal.valheim.navcompass";
         public const string PluginName = "Nav Compass";
-        public const string PluginVersion = "0.1.0";
+        public const string PluginVersion = "0.2.0";
 
         private const float StripWidth = 480f;
         private const float StripHeight = 22f;
         private const float StripHalfFovDeg = 90f;
+        private const float FramePadding = 6f;
+        private static readonly Color ValheimOrange = new Color(1f, 0.631f, 0.235f, 1f);
+        private static readonly Color ValheimBeige = new Color(0.8529f, 0.725f, 0.5331f, 1f);
         private const float PositionMatchTolerance = 1f;
 
         private static readonly FieldInfo PinsField = AccessTools.Field(typeof(Minimap), "m_pins");
@@ -404,15 +407,25 @@ namespace Mod6_NavCompass
 
             _rootGo.AddComponent<GraphicRaycaster>();
 
-            var bgGo = new GameObject("StripBg");
-            bgGo.transform.SetParent(_rootGo.transform, false);
-            var bgImage = bgGo.AddComponent<Image>();
-            bgImage.color = new Color(0f, 0f, 0f, 0.25f);
+            // Drewniana ramka jak w oknach gry, a w niej pasek z przycinaniem (RectMask2D) -
+            // znaczniki wyjezdzajace poza pasek nie wchodza na obramowanie.
+            var frameGo = new GameObject("StripFrame", typeof(RectTransform));
+            frameGo.transform.SetParent(_rootGo.transform, false);
+            var frameRect = frameGo.GetComponent<RectTransform>();
+            frameRect.anchorMin = new Vector2(0.5f, 1f);
+            frameRect.anchorMax = new Vector2(0.5f, 1f);
+            frameRect.pivot = new Vector2(0.5f, 1f);
+            frameRect.anchoredPosition = new Vector2(0f, -10f);
+            frameRect.sizeDelta = new Vector2(StripWidth + 2f * FramePadding, StripHeight + 2f * FramePadding);
+            ApplyWoodFrameStyle(frameGo.AddComponent<Image>(), frameRect.sizeDelta.y);
+
+            var bgGo = new GameObject("StripBg", typeof(RectTransform));
+            bgGo.transform.SetParent(frameRect, false);
             _stripRect = bgGo.GetComponent<RectTransform>();
-            _stripRect.anchorMin = new Vector2(0.5f, 1f);
-            _stripRect.anchorMax = new Vector2(0.5f, 1f);
-            _stripRect.pivot = new Vector2(0.5f, 1f);
-            _stripRect.anchoredPosition = new Vector2(0f, -14f);
+            _stripRect.anchorMin = new Vector2(0.5f, 0.5f);
+            _stripRect.anchorMax = new Vector2(0.5f, 0.5f);
+            _stripRect.pivot = new Vector2(0.5f, 0.5f);
+            _stripRect.anchoredPosition = Vector2.zero;
             _stripRect.sizeDelta = new Vector2(StripWidth, StripHeight);
             bgGo.AddComponent<RectMask2D>();
 
@@ -420,7 +433,7 @@ namespace Mod6_NavCompass
             var centerGo = new GameObject("CenterTick");
             centerGo.transform.SetParent(_stripRect, false);
             var centerImg = centerGo.AddComponent<Image>();
-            centerImg.color = new Color(1f, 1f, 1f, 0.9f);
+            centerImg.color = ValheimOrange;
             var centerRect = centerGo.GetComponent<RectTransform>();
             centerRect.anchorMin = new Vector2(0.5f, 0f);
             centerRect.anchorMax = new Vector2(0.5f, 1f);
@@ -442,7 +455,9 @@ namespace Mod6_NavCompass
                 txt.text = label;
                 txt.fontSize = label.Length == 1 ? 15f : 11f;
                 txt.alignment = TextAlignmentOptions.Center;
-                txt.color = label == "N" ? new Color(1f, 0.3f, 0.3f) : new Color(1f, 1f, 1f, 0.75f);
+                txt.color = label == "N" ? new Color(1f, 0.3f, 0.3f) : ValheimBeige;
+                if (label.Length == 1)
+                    StyleAsWoodLetter(txt, label == "N");
                 var rt = go.GetComponent<RectTransform>();
                 rt.anchorMin = new Vector2(0.5f, 0.5f);
                 rt.anchorMax = new Vector2(0.5f, 0.5f);
@@ -451,6 +466,127 @@ namespace Mod6_NavCompass
                 _cardinalMarkers[label] = rt;
                 rt.gameObject.AddComponent<CardinalTag>().Bearing = bearing;
             }
+        }
+
+        // Ta sama grafika i material co drewniane okna gry (i panele Jotunna) - brane wprost z
+        // zaladowanych zasobow gry, bez zaleznosci od Jotunna. Obramowanie cietej grafiki jest
+        // projektowane pod duze okna; na cienkim pasku zmniejszamy je (pixelsPerUnitMultiplier),
+        // tak zeby gorna+dolna krawedz zajmowaly najwyzej polowe wysokosci ramki.
+        private static void ApplyWoodFrameStyle(Image image, float frameHeight)
+        {
+            var sprite = Resources.FindObjectsOfTypeAll<Sprite>().FirstOrDefault(s => s.name == "woodpanel_trophys");
+            if (sprite == null)
+            {
+                Log.LogWarning("Nie znaleziono grafiki 'woodpanel_trophys' w zasobach gry - kompas zostaje na zwyklym, polprzezroczystym tle.");
+                image.color = new Color(0f, 0f, 0f, 0.25f);
+                return;
+            }
+
+            image.sprite = sprite;
+            image.type = Image.Type.Sliced;
+            image.color = Color.white;
+            var material = Resources.FindObjectsOfTypeAll<Material>().FirstOrDefault(m => m.name == "litpanel");
+            if (material != null)
+                image.material = material;
+
+            float verticalBorder = sprite.border.y + sprite.border.w;
+            if (verticalBorder > 0f)
+            {
+                const float referencePixelsPerUnit = 100f;
+                float needed = verticalBorder * referencePixelsPerUnit / (sprite.pixelsPerUnit * 0.5f * frameHeight);
+                image.pixelsPerUnitMultiplier = Mathf.Max(1f, needed);
+            }
+        }
+
+        // Glowne kierunki (N/E/S/W) "wystrugane z drewna": nordycka czcionka gry (Norsebold),
+        // tekstura deski z gry jako powierzchnia liter, ciemny obrys jak wypalona krawedz i
+        // cien pod spodem. Wszystko brane z zaladowanych zasobow gry - mod nie wozi ze soba
+        // zadnej grafiki. Brak czegokolwiek = zostaje zwykly wyglad litery, bez bledu.
+        private Material _woodLetterMaterial;
+        private bool _woodLetterMaterialTried;
+
+        private void StyleAsWoodLetter(TextMeshProUGUI txt, bool north)
+        {
+            var norse = Resources.FindObjectsOfTypeAll<TMP_FontAsset>()
+                .OrderByDescending(f => f.name.IndexOf("Norsebold", StringComparison.OrdinalIgnoreCase) >= 0)
+                .FirstOrDefault(f => f.name.IndexOf("Norse", StringComparison.OrdinalIgnoreCase) >= 0);
+            if (norse != null)
+                txt.font = norse;
+
+            var material = GetWoodLetterMaterial(txt.font);
+            if (material == null)
+                return;
+
+            txt.fontSharedMaterial = material;
+            txt.fontSize = 20f;
+            txt.extraPadding = true;
+            // Kolor wierzcholkow mnozy sie z tekstura - N zostaje czerwonawym drewnem, zeby
+            // polnoc dalej odrozniala sie od reszty na pierwszy rzut oka.
+            txt.color = north ? new Color(1f, 0.55f, 0.45f) : Color.white;
+        }
+
+        private Material GetWoodLetterMaterial(TMP_FontAsset font)
+        {
+            if (_woodLetterMaterialTried)
+                return _woodLetterMaterial;
+            _woodLetterMaterialTried = true;
+
+            // Pelny shader SDF (nie "Mobile") - tylko on ma teksture powierzchni (_FaceTex).
+            var shader = Shader.Find("TextMeshPro/Distance Field");
+            if (font == null || font.material == null || shader == null)
+            {
+                Log.LogWarning("Kompas: brak czcionki albo shadera 'TextMeshPro/Distance Field' - litery N/E/S/W bez drewna.");
+                return null;
+            }
+
+            var material = new Material(font.material) { name = "NavCompassWoodLetters", shader = shader };
+            string woodSource = ApplyWoodFaceTexture(material);
+            material.SetColor("_FaceColor", Color.white);
+            material.SetFloat("_FaceDilate", 0.1f);
+            material.SetFloat("_OutlineWidth", 0.25f);
+            material.SetColor("_OutlineColor", new Color(0.16f, 0.09f, 0.04f, 1f));
+            material.EnableKeyword("UNDERLAY_ON");
+            material.SetColor("_UnderlayColor", new Color(0f, 0f, 0f, 0.6f));
+            material.SetFloat("_UnderlayOffsetX", 0.4f);
+            material.SetFloat("_UnderlayOffsetY", -0.4f);
+            material.SetFloat("_UnderlaySoftness", 0.3f);
+            // Bez przeliczenia proporcji obrys/cien bylyby liczone dla starych wartosci i ucinane.
+            ShaderUtilities.UpdateShaderRatios(material);
+
+            Log.LogInfo($"Kompas: drewniane litery N/E/S/W - czcionka '{font.name}', drewno: {woodSource}.");
+            _woodLetterMaterial = material;
+            return material;
+        }
+
+        // Deska z gry (Planks1c: cieple, poziome deski). Gdy nie jest akurat w pamieci - drewno
+        // z grafiki okien gry (woodpanel_trophys, zawsze wczytana), bez jej obramowania.
+        private static string ApplyWoodFaceTexture(Material material)
+        {
+            var planks = Resources.FindObjectsOfTypeAll<Texture2D>().FirstOrDefault(t => t.name == "Planks1c");
+            if (planks != null)
+            {
+                material.SetTexture("_FaceTex", planks);
+                // Polowa wysokosci tekstury na litere - 2-3 deski zamiast drobnych paskow.
+                material.SetTextureScale("_FaceTex", new Vector2(1f, 0.5f));
+                material.SetTextureOffset("_FaceTex", Vector2.zero);
+                return "Planks1c";
+            }
+
+            var panel = Resources.FindObjectsOfTypeAll<Sprite>().FirstOrDefault(s => s.name == "woodpanel_trophys");
+            if (panel != null && panel.texture != null)
+            {
+                var r = panel.textureRect;
+                var b = panel.border; // x=lewo, y=dol, z=prawo, w=gora
+                float w = panel.texture.width, h = panel.texture.height;
+                // Fragment srodka panelu (bez ramki) - caly srodek na jedna litere dalby zbyt drobne slojowanie.
+                float innerW = (r.width - b.x - b.z) * 0.3f, innerH = (r.height - b.y - b.w) * 0.3f;
+                material.SetTexture("_FaceTex", panel.texture);
+                material.SetTextureScale("_FaceTex", new Vector2(innerW / w, innerH / h));
+                material.SetTextureOffset("_FaceTex", new Vector2((r.x + b.x) / w, (r.y + b.y) / h));
+                return "woodpanel_trophys (Planks1c niedostepne)";
+            }
+
+            return "BRAK (ani Planks1c, ani woodpanel_trophys) - litery w kolorze drewna bez slojow";
         }
 
         private class CardinalTag : MonoBehaviour
