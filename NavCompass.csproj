@@ -6,8 +6,8 @@
     <Nullable>disable</Nullable>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <AssemblyName>Mod6-NavCompass</AssemblyName>
-    <RootNamespace>Mod6_NavCompass</RootNamespace>
+    <AssemblyName>NavCompass</AssemblyName>
+    <RootNamespace>NavCompass</RootNamespace>
 
     <!-- Ustaw sciezke do Valheim przez zmienna srodowiskowa VALHEIM_PATH,
          albo nadpisz przy budowaniu: dotnet build -p:ValheimPath="D:\Games\Valheim" -->

@@ -10,7 +10,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Mod6_NavCompass
+namespace NavCompass
 {
     // Roza wiatrow na HUD-zie pokazujaca kierunek do recznie oznaczonych pinow na mapie.
     //
@@ -18,7 +18,7 @@ namespace Mod6_NavCompass
     // PinData.m_checked - gra ma juz swoj wlasny wizualny "checked" stan, wiec nie dublujemy go):
     //   None -> Circled (cienki jasnoniebieski pierscien) -> None
     // Tylko piny w stanie Circled sa pokazywane na kompasie na gorze ekranu.
-    // Oznaczenia sa zapisywane do pliku per-swiat (BepInEx/plugins/Mod6-NavCompass/tracked_<swiat>.json),
+    // Oznaczenia sa zapisywane do pliku per-swiat (BepInEx/plugins/NavCompass/tracked_<swiat>.json),
     // wiec przetrwaja restart gry.
     //
     // Wykrywanie klikietego pinu: wlasna wersja Minimap.GetClosestPin (ta z gry wymaga
@@ -348,6 +348,31 @@ namespace Mod6_NavCompass
             }
         }
 
+        // Do wersji 0.1.x DLL nazywal sie "Mod6-NavCompass" i lezal w takim folderze pluginow -
+        // zapis zaznaczen jest obok DLL, wiec po zmianie nazwy przenosimy go jednorazowo.
+        private const string LegacyPluginFolder = "Mod6-NavCompass";
+
+        private static void MigrateLegacySaveFile(string path)
+        {
+            if (File.Exists(path))
+                return;
+            string pluginsDir = Path.GetDirectoryName(SaveDir);
+            if (pluginsDir == null)
+                return;
+            string legacyPath = Path.Combine(pluginsDir, LegacyPluginFolder, Path.GetFileName(path));
+            if (!File.Exists(legacyPath) || string.Equals(Path.GetFullPath(legacyPath), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+                return;
+            try
+            {
+                File.Copy(legacyPath, path);
+                Log.LogInfo($"Przeniesiono zaznaczone piny ze starego folderu: {legacyPath} -> {path}");
+            }
+            catch (Exception e)
+            {
+                Log.LogWarning($"Nie udalo sie przeniesc zaznaczen ze starego folderu ({legacyPath}): {e}");
+            }
+        }
+
         private void TryLoadTrackedPins()
         {
             string worldName = ZNet.instance?.GetWorldName();
@@ -358,6 +383,7 @@ namespace Mod6_NavCompass
             _savedStateLoaded = true;
 
             string path = SaveFilePath(worldName);
+            MigrateLegacySaveFile(path);
             if (!File.Exists(path))
                 return;
 

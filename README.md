@@ -39,10 +39,15 @@ found, the compass falls back to a plain look instead of failing.
 
 1. Install BepInEx for Valheim if you haven't already (see link above, or
    use [r2modman](https://valheim.thunderstore.io/package/ebkr/r2modman/)).
-2. Download `Mod6-NavCompass.dll` from the
+2. Download `NavCompass.dll` from the
    [latest release](../../releases/latest).
-3. Drop it into `<Valheim install folder>\BepInEx\plugins\Mod6-NavCompass\`.
+3. Drop it into `<Valheim install folder>\BepInEx\plugins\NavCompass\`.
 4. Launch the game, mark a pin on the map, close the map.
+
+**Upgrading from 0.1.x:** the DLL used to be called `Mod6-NavCompass.dll`.
+Delete the old `BepInEx\plugins\Mod6-NavCompass\` folder after installing
+the new version - your marked pins are copied over automatically the first
+time you load each world.
 
 ## Building from source
 
@@ -60,7 +65,7 @@ environment variable, then falls back to the default Steam location
 (`C:\Program Files (x86)\Steam\steamapps\common\Valheim`).
 
 The build automatically copies the built DLL into
-`<Valheim>\BepInEx\plugins\Mod6-NavCompass\` for quick in-game testing.
+`<Valheim>\BepInEx\plugins\NavCompass\` for quick in-game testing.
 
 ## Notes on how it works (and a few gotchas found along the way)
 
