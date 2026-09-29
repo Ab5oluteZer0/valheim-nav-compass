@@ -95,6 +95,12 @@ The build automatically copies the built DLL into
   try/catch with a "disable after first error" guard - an uncaught exception
   thrown every frame floods the BepInEx log and tanks FPS by itself.
 
+## Support
+
+All my mods are free and will stay free. If you enjoy them and want to say
+thanks, you can leave a voluntary tip via [PayPal](https://www.paypal.com/ncp/payment/4JQUSHTJGBAG6) - it doesn't
+unlock anything, it just helps me keep making mods.
+
 ## License
 
 MIT - see [LICENSE](LICENSE).
