@@ -38,13 +38,15 @@ jobs:
           base = "https://github.com/" + os.environ["GITHUB_REPOSITORY"]
           text = open("README.md", encoding="utf-8").read()
           def fix(m):
-              url = m.group(1)
+              bang, label, url = m.group(1), m.group(2), m.group(3)
               if re.match(r"[a-z]+:|#", url):
                   return m.group(0)
               if url.startswith("../../"):
-                  return "](" + base + "/" + url[6:] + ")"
-              return "](" + base + "/blob/HEAD/" + url + ")"
-          open("thunderstore/README.md", "w", encoding="utf-8").write(re.sub(r"\]\(([^)]+)\)", fix, text))
+                  target = base + "/" + url[6:]
+              else:
+                  target = base + ("/raw/HEAD/" if bang else "/blob/HEAD/") + url
+              return bang + label + "(" + target + ")"
+          open("thunderstore/README.md", "w", encoding="utf-8").write(re.sub(r"(!?)(\[[^\]]*\])\(([^)]+)\)", fix, text))
           EOF
 
       - name: Install Thunderstore CLI
