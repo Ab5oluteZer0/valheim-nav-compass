@@ -30,7 +30,7 @@ namespace NavCompass
     {
         public const string PluginGUID = "com.michal.valheim.navcompass";
         public const string PluginName = "Nav Compass";
-        public const string PluginVersion = "1.0.1";
+        public const string PluginVersion = "1.0.2";
 
         private const float StripWidth = 480f;
         // Wysokosc miesci ikone sledzonego pinu i pod nia napis (nazwa + dystans).
