@@ -10,6 +10,12 @@ auto-pathfinding, just a visual direction indicator.
 > Iron Gate. It marks your game as modded (the game shows this in the main menu),
 > as Iron Gate asks mod authors to do.
 
+## Screenshots
+
+![The compass strip with a tracked pin](docs/compass-strip.png)
+
+![Tracked pin on the compass while the map is open](docs/compass.jpg)
+
 ## How to use
 
 Open the map and click a pin to cycle its state:
