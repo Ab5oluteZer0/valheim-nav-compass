@@ -28,8 +28,11 @@ Open the map and click a pin to cycle its state:
 
 Works on *any* pin, including ones the game places automatically (bosses,
 trader/shop markers, etc.) - not just ones you placed yourself. You can
-track multiple pins at once. Marked pins are saved per-world in
-`BepInEx\config\NavCompass\` and survive a game restart and mod updates.
+track multiple pins at once. Map pins belong to a character, so marks are
+saved per world **and** character (`tracked_<world>_<character>.json` in
+`BepInEx\config\NavCompass\`) and survive a game restart and mod updates.
+Before 1.0.3 they were shared by all characters in a world - the first
+character that enters the world after the update takes them over.
 A mark stays even while its pin is temporarily off the map (e.g. a category
 hidden in Auto Waypoints) and comes back with it; it is removed only when you
 delete the pin yourself.

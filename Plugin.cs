@@ -30,7 +30,7 @@ namespace NavCompass
     {
         public const string PluginGUID = "com.michal.valheim.navcompass";
         public const string PluginName = "Nav Compass";
-        public const string PluginVersion = "1.0.2";
+        public const string PluginVersion = "1.0.3";
 
         private const float StripWidth = 480f;
         // Wysokosc miesci ikone sledzonego pinu i pod nia napis (nazwa + dystans).
@@ -399,29 +399,45 @@ namespace NavCompass
             return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
         }
 
-        // ---------- zapis / odczyt oznaczen (per swiat) ----------
+        // ---------- zapis / odczyt oznaczen (per swiat i postac) ----------
 
         // Zapis w BepInEx/config/NavCompass, a nie obok DLL: menedzery modow (r2modman) przy kazdej
         // aktualizacji kasuja caly folder pluginu.
         private static string _saveDir;
         private static string SaveDir => _saveDir ??= Directory.CreateDirectory(Path.Combine(Paths.ConfigPath, "NavCompass")).FullName;
 
-        private static string SaveFilePath(string worldName)
+        // Plik wczytanej sesji - zapis idzie zawsze tam, skad wczytano.
+        private string _savePath;
+
+        private static string SafeFileName(string name) => string.Join("_", name.Split(Path.GetInvalidFileNameChars()));
+
+        // Postac w grze = jej plik zapisu (.fch); nazwa wyswietlana moze sie powtarzac.
+        private static string CurrentCharacter()
         {
-            string safe = string.Join("_", worldName.Split(Path.GetInvalidFileNameChars()));
-            return Path.Combine(SaveDir, $"tracked_{safe}.json");
+            var profile = Game.instance != null ? Game.instance.GetPlayerProfile() : null;
+            if (profile == null)
+                return null;
+            return !string.IsNullOrEmpty(profile.m_filename) ? profile.m_filename : profile.GetName();
+        }
+
+        // Piny mapy naleza do postaci, wiec oznaczenia sa na swiat I postac.
+        private static string SaveFilePath(string worldName, string character)
+        {
+            string path = Path.Combine(SaveDir, $"tracked_{SafeFileName(worldName)}_{SafeFileName(character)}.json");
+            if (!File.Exists(path))
+                TakeOverWorldFile(worldName, path);
+            return path;
         }
 
         private void SaveTrackedPins()
         {
             try
             {
-                string worldName = ZNet.instance?.GetWorldName();
-                if (string.IsNullOrEmpty(worldName))
+                if (_savePath == null)
                     return;
 
                 var data = new TrackedPinsSaveData { positions = CircledPins.Select(p => p.m_pos).Concat(_pendingCircled).ToList() };
-                File.WriteAllText(SaveFilePath(worldName), JsonUtility.ToJson(data));
+                File.WriteAllText(_savePath, JsonUtility.ToJson(data));
             }
             catch (Exception e)
             {
@@ -429,53 +445,60 @@ namespace NavCompass
             }
         }
 
-        // Starsze miejsca zapisu, od najnowszego: do wersji 1.0.0 zapis lezal obok DLL, a do 0.1.x
-        // DLL nazywal sie "Mod6-NavCompass" i lezal w takim folderze pluginow.
+        // Wczesniejsze zapisy (jeden plik na swiat, wspolny dla postaci), od najnowszego: do 1.0.3
+        // w BepInEx/config/NavCompass, do 1.0.0 obok DLL, do 0.1.x w folderze "Mod6-NavCompass".
         private const string LegacyPluginFolder = "Mod6-NavCompass";
 
         private static IEnumerable<string> LegacySaveDirs()
         {
+            yield return SaveDir;
             yield return Path.GetDirectoryName(typeof(NavCompassPlugin).Assembly.Location);
             yield return Path.Combine(Paths.PluginPath, LegacyPluginFolder);
         }
 
-        // Jednorazowo kopiuje zapis ze starego miejsca, dopoki w nowym go nie ma.
-        private static void MigrateLegacySaveFile(string path)
+        // Wspolny plik swiata przejmuje pierwsza postac, ktora wejdzie do tego swiata po
+        // aktualizacji; stare pliki zostaja jako *.migrated (kopia), zeby nie trafily do kolejnych.
+        private static void TakeOverWorldFile(string worldName, string path)
         {
-            if (File.Exists(path))
-                return;
-            string legacyPath = LegacySaveDirs()
-                .Select(dir => Path.Combine(dir, Path.GetFileName(path)))
-                .FirstOrDefault(File.Exists);
-            if (legacyPath == null)
+            string fileName = $"tracked_{SafeFileName(worldName)}.json";
+            var sources = LegacySaveDirs().Select(dir => Path.Combine(dir, fileName)).Where(File.Exists).ToList();
+            if (sources.Count == 0)
                 return;
             try
             {
-                File.Copy(legacyPath, path);
-                Log.LogInfo($"Przeniesiono zaznaczone piny ze starego miejsca: {legacyPath} -> {path}");
+                File.Copy(sources[0], path);
+                foreach (var source in sources)
+                {
+                    string backup = source + ".migrated";
+                    if (File.Exists(backup))
+                        File.Delete(backup);
+                    File.Move(source, backup);
+                }
+                Log.LogInfo($"Oznaczenia wspolne dla swiata przejete przez postac: {sources[0]} -> {path}");
             }
             catch (Exception e)
             {
-                Log.LogWarning($"Nie udalo sie przeniesc zaznaczen ze starego miejsca ({legacyPath}): {e}");
+                Log.LogWarning($"Nie udalo sie przejac wspolnych oznaczen swiata ({sources[0]}): {e}");
             }
         }
 
         private void TryLoadTrackedPins()
         {
             string worldName = ZNet.instance?.GetWorldName();
-            if (string.IsNullOrEmpty(worldName))
+            string character = CurrentCharacter();
+            if (string.IsNullOrEmpty(worldName) || string.IsNullOrEmpty(character))
                 return;
 
             _currentWorldName = worldName;
             _savedStateLoaded = true;
 
-            // Stan poprzedniego swiata nie przechodzi do nowego (jego piny juz nie istnieja).
+            // Stan poprzedniego swiata / postaci nie przechodzi dalej (jego piny juz nie istnieja).
             foreach (var pin in _pinStates.Keys.ToList())
                 DropPinState(pin);
             _pendingCircled.Clear();
 
-            string path = SaveFilePath(worldName);
-            MigrateLegacySaveFile(path);
+            string path = SaveFilePath(worldName, character);
+            _savePath = path;
             if (!File.Exists(path))
                 return;
 
