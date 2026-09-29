@@ -30,10 +30,13 @@ namespace NavCompass
     {
         public const string PluginGUID = "com.michal.valheim.navcompass";
         public const string PluginName = "Nav Compass";
-        public const string PluginVersion = "0.2.0";
+        public const string PluginVersion = "0.3.0";
 
         private const float StripWidth = 480f;
-        private const float StripHeight = 22f;
+        // Wysokosc miesci ikone sledzonego pinu i pod nia napis (nazwa + dystans).
+        private const float StripHeight = 36f;
+        private const float MarkerIconSize = 18f;
+        private const float MarkerLabelMaxWidth = 140f;
         private const float StripHalfFovDeg = 90f;
         private const float FramePadding = 6f;
         private static readonly Color ValheimOrange = new Color(1f, 0.631f, 0.235f, 1f);
@@ -665,9 +668,47 @@ namespace NavCompass
                 bool visible = PositionOnStrip(marker.Root, bearing, playerYaw);
                 marker.Root.gameObject.SetActive(visible);
 
-                string label = string.IsNullOrEmpty(pin.m_name) ? FormatDistance(distance) : $"{pin.m_name} {FormatDistance(distance)}";
-                marker.DistanceText.text = label;
+                string name = VisiblePinName(pin);
+                marker.DistanceText.text = name == null ? FormatDistance(distance) : $"{name} {FormatDistance(distance)}";
             }
+        }
+
+        // Nazwa pinu na kompasie tylko wtedy, gdy pin ja ma (gracz ja nadal) i jego podpis jest
+        // widoczny na mapie. O podpisach pinow Auto Waypoints decyduje tamten mod - pytany przez
+        // jego publiczna metode IsPinLabelVisible, znaleziona przez Chainloader i refleksje, zeby
+        // kompas dzialal tez bez niego (wtedy nazwa jest pokazywana zawsze, gdy pin ja ma).
+        private const string AutoWaypointsGuid = "com.michal.valheim.autowaypoints";
+        private Func<Minimap.PinData, bool> _isPinLabelVisible;
+        private bool _labelVisibilityResolved;
+
+        private string VisiblePinName(Minimap.PinData pin)
+        {
+            if (string.IsNullOrEmpty(pin.m_name))
+                return null;
+            if (!_labelVisibilityResolved)
+            {
+                _labelVisibilityResolved = true;
+                _isPinLabelVisible = ResolveLabelVisibility();
+            }
+            if (_isPinLabelVisible != null && !_isPinLabelVisible(pin))
+                return null;
+            // Piny dodane przez gre maja klucze tlumaczen ("$enemy_bonemass") - jak na mapie.
+            return Localization.instance != null ? Localization.instance.Localize(pin.m_name) : pin.m_name;
+        }
+
+        private static Func<Minimap.PinData, bool> ResolveLabelVisibility()
+        {
+            if (!BepInEx.Bootstrap.Chainloader.PluginInfos.TryGetValue(AutoWaypointsGuid, out var info) || info.Instance == null)
+                return null;
+            var method = info.Instance.GetType().GetMethod("IsPinLabelVisible", BindingFlags.Public | BindingFlags.Instance,
+                null, new[] { typeof(Minimap.PinData) }, null);
+            if (method == null || method.ReturnType != typeof(bool))
+            {
+                Log.LogWarning("Auto Waypoints nie udostepnia IsPinLabelVisible (starsza wersja?) - nazwy pinow na kompasie pokazywane zawsze.");
+                return null;
+            }
+            Log.LogInfo("Nazwy pinow na kompasie wedlug ustawien podpisow z Auto Waypoints.");
+            return (Func<Minimap.PinData, bool>)Delegate.CreateDelegate(typeof(Func<Minimap.PinData, bool>), info.Instance, method);
         }
 
         private PinMarker CreateCompassMarker(Minimap.PinData pin)
@@ -680,37 +721,47 @@ namespace NavCompass
             var icon = iconGo.AddComponent<Image>();
             icon.sprite = pin.m_icon;
             icon.preserveAspect = true;
+            // Ikona w gornej czesci paska, napis (nazwa + dystans) pod nia - OBA w calosci
+            // wewnatrz paska: pasek przycina zawartosc (RectMask2D), a napis ustawiony ponizej
+            // jego dolnej krawedzi byl praktycznie niewidoczny (zostawaly z niego 3 piksele).
             var iconRect = iconGo.GetComponent<RectTransform>();
-            iconRect.anchorMin = new Vector2(0.5f, 0.5f);
-            iconRect.anchorMax = new Vector2(0.5f, 0.5f);
-            iconRect.pivot = new Vector2(0.5f, 0.5f);
-            iconRect.sizeDelta = new Vector2(14f, 14f);
-            iconRect.anchoredPosition = new Vector2(0f, 1f);
+            iconRect.anchorMin = new Vector2(0.5f, 1f);
+            iconRect.anchorMax = new Vector2(0.5f, 1f);
+            iconRect.pivot = new Vector2(0.5f, 1f);
+            iconRect.sizeDelta = new Vector2(MarkerIconSize, MarkerIconSize);
+            iconRect.anchoredPosition = new Vector2(0f, -2f);
+
+            float labelHeight = StripHeight - MarkerIconSize - 2f;
 
             var distGo = new GameObject("Dist");
             distGo.transform.SetParent(go.transform, false);
             var distText = distGo.AddComponent<TextMeshProUGUI>();
             var font = GetFont();
             if (font != null) distText.font = font;
-            distText.fontSize = 8f;
+            distText.fontSize = 13f;
             distText.enableAutoSizing = true;
-            distText.fontSizeMin = 5f;
-            distText.fontSizeMax = 8f;
+            distText.fontSizeMin = 10f;
+            distText.fontSizeMax = 13f;
+            distText.fontStyle = FontStyles.Bold;
             distText.alignment = TextAlignmentOptions.Center;
-            distText.color = new Color(1f, 0.85f, 0.3f);
+            distText.color = new Color(1f, 0.93f, 0.75f);
+            // Ciemny obrys liter zamiast tla - jasny tekst odcina sie od drewna paska.
+            distText.outlineWidth = 0.2f;
+            distText.outlineColor = new Color32(20, 12, 5, 255);
             distText.overflowMode = TextOverflowModes.Ellipsis;
+            distText.raycastTarget = false;
             var distRect = distGo.GetComponent<RectTransform>();
             distRect.anchorMin = new Vector2(0.5f, 0f);
             distRect.anchorMax = new Vector2(0.5f, 0f);
-            distRect.pivot = new Vector2(0.5f, 0.5f);
-            distRect.sizeDelta = new Vector2(110f, 12f);
-            distRect.anchoredPosition = new Vector2(0f, -3f);
+            distRect.pivot = new Vector2(0.5f, 0f);
+            distRect.sizeDelta = new Vector2(MarkerLabelMaxWidth, labelHeight);
+            distRect.anchoredPosition = new Vector2(0f, 1f);
 
             var rt = go.GetComponent<RectTransform>();
             rt.anchorMin = new Vector2(0.5f, 0.5f);
             rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(110f, StripHeight);
+            rt.sizeDelta = new Vector2(MarkerLabelMaxWidth, StripHeight);
 
             return new PinMarker { Root = rt, DistanceText = distText };
         }

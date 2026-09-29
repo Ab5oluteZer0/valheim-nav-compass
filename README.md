@@ -21,6 +21,13 @@ trader/shop markers, etc.) - not just ones you placed yourself. You can
 track multiple pins at once. Marked pins are saved per-world and survive a
 game restart.
 
+Under each tracked pin's icon the compass shows the distance, and the pin's
+name when it has one (translated like on the map). With
+[Auto Waypoints](https://github.com/Ab5oluteZer0/valheim-auto-waypoints)
+installed, the name follows its label settings: if a pin's label is hidden on
+the map, the compass shows just the distance. Nav Compass works on its own
+too - Auto Waypoints is optional.
+
 ## Look
 
 The compass strip is styled to match the game's own UI: it sits in the same
