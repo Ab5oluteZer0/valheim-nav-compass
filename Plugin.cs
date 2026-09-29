@@ -30,7 +30,7 @@ namespace NavCompass
     {
         public const string PluginGUID = "com.michal.valheim.navcompass";
         public const string PluginName = "Nav Compass";
-        public const string PluginVersion = "0.3.0";
+        public const string PluginVersion = "1.0.0";
 
         private const float StripWidth = 480f;
         // Wysokosc miesci ikone sledzonego pinu i pod nia napis (nazwa + dystans).
@@ -81,6 +81,9 @@ namespace NavCompass
         private void Awake()
         {
             Log = Logger;
+            // Gra prosi mody o ustawienie tej flagi: w menu pojawia sie napis, ze gra jest
+            // zmodowana (Iron Gate wymaga oznaczania modow jako nieoficjalnych).
+            Game.isModded = true;
             _instance = this;
             new Harmony(PluginGUID).PatchAll(typeof(NavCompassPlugin).Assembly);
         }

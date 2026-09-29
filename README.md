@@ -6,6 +6,10 @@ and the bearing/distance to map pins you've manually marked - like the
 navigation compass in many other open-world games. This is **not**
 auto-pathfinding, just a visual direction indicator.
 
+> **Unofficial mod.** This is a fan-made mod, not affiliated with or endorsed by
+> Iron Gate. It marks your game as modded (the game shows this in the main menu),
+> as Iron Gate asks mod authors to do.
+
 ## How to use
 
 Open the map and click a pin to cycle its state:
