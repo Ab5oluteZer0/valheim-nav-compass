@@ -30,7 +30,7 @@ namespace NavCompass
     {
         public const string PluginGUID = "com.michal.valheim.navcompass";
         public const string PluginName = "Nav Compass";
-        public const string PluginVersion = "1.0.0";
+        public const string PluginVersion = "1.0.1";
 
         private const float StripWidth = 480f;
         // Wysokosc miesci ikone sledzonego pinu i pod nia napis (nazwa + dystans).
@@ -42,6 +42,7 @@ namespace NavCompass
         private static readonly Color ValheimOrange = new Color(1f, 0.631f, 0.235f, 1f);
         private static readonly Color ValheimBeige = new Color(0.8529f, 0.725f, 0.5331f, 1f);
         private const float PositionMatchTolerance = 1f;
+        private const float PendingResolveInterval = 1f;
 
         private static readonly FieldInfo PinsField = AccessTools.Field(typeof(Minimap), "m_pins");
         private static readonly MethodInfo ScreenToWorldPointMethod = AccessTools.Method(typeof(Minimap), "ScreenToWorldPoint");
@@ -55,6 +56,11 @@ namespace NavCompass
         private readonly Dictionary<Minimap.PinData, MarkState> _pinStates = new Dictionary<Minimap.PinData, MarkState>();
         private readonly Dictionary<Minimap.PinData, GameObject> _overlayByPin = new Dictionary<Minimap.PinData, GameObject>();
         private readonly Dictionary<Minimap.PinData, PinMarker> _compassMarkers = new Dictionary<Minimap.PinData, PinMarker>();
+        // Oznaczenia bez pinu na mapie (jeszcze nie dodany albo schowany przez inny mod) - czekaja
+        // na pin w tym samym miejscu i sa zapisywane razem z reszta.
+        private readonly List<Vector3> _pendingCircled = new List<Vector3>();
+        private float _nextPendingResolve;
+        private static bool _userRemovingPin;
 
         private GameObject _rootGo;
         private RectTransform _stripRect;
@@ -205,6 +211,26 @@ namespace NavCompass
             }
         }
 
+        // Gracz usuwa pin z mapy (prawy klik, pad) zawsze przez RemovePin(pozycja, promien), a mody
+        // chowaja swoje piny przez RemovePin(PinData). Oznaczenie znika tylko przy usunieciu przez
+        // gracza - pin schowany przez mod dostaje je z powrotem, gdy wroci na mape.
+        [HarmonyPatch(typeof(Minimap), nameof(Minimap.RemovePin), new[] { typeof(Vector3), typeof(float) })]
+        private static class Minimap_RemovePinAt_Patch
+        {
+            private static void Prefix() => _userRemovingPin = true;
+            private static void Finalizer() => _userRemovingPin = false;
+        }
+
+        [HarmonyPatch(typeof(Minimap), nameof(Minimap.RemovePin), new[] { typeof(Minimap.PinData) })]
+        private static class Minimap_RemovePin_Patch
+        {
+            private static void Prefix(Minimap.PinData pin)
+            {
+                if (_userRemovingPin && pin != null)
+                    _instance?.ForgetPin(pin);
+            }
+        }
+
         // Gra sama przelacza pin.m_checked (czerwony "przekreslony" wyglad) przy kazdym kliknieciu
         // na pin, niezaleznie od nas - dlatego jawnie nadpisujemy ta wartosc zeby dopasowac ja
         // do WLASNEGO 3-stanowego licznika: None -> Strikethrough -> Circled -> None.
@@ -261,9 +287,9 @@ namespace NavCompass
 
         private IEnumerable<Minimap.PinData> CircledPins => _pinStates.Where(kv => kv.Value == MarkState.Circled).Select(kv => kv.Key);
 
-        // jesli gracz usunie oznaczony pin z mapy (prawy klik -> usun), trzeba go tez
-        // sciagnac z naszego stanu, inaczej zostaje na kompasie na zawsze i nie da sie go
-        // juz odznaczyc (bo nie da sie go kliknac, skoro zniknal z mapy).
+        // Pin zniknal z mapy, ale nie usunal go gracz (to obsluguje ForgetPin) - np. inny mod go
+        // schowal albo przebudowal. Oznaczenie czeka wtedy na pin w tym samym miejscu, zamiast
+        // przepasc; kompas pokazuje tylko piny, ktore sa na mapie.
         private void RemoveDeletedPins()
         {
             if (_pinStates.Count == 0)
@@ -272,20 +298,66 @@ namespace NavCompass
             var pins = PinsField.GetValue(Minimap.instance) as List<Minimap.PinData>;
             var alive = pins != null ? new HashSet<Minimap.PinData>(pins) : new HashSet<Minimap.PinData>();
 
-            bool anyRemoved = false;
             foreach (var stale in _pinStates.Keys.Where(p => !alive.Contains(p)).ToList())
             {
-                _pinStates.Remove(stale);
-                if (_overlayByPin.TryGetValue(stale, out var overlay))
-                {
-                    if (overlay != null) Destroy(overlay);
-                    _overlayByPin.Remove(stale);
-                }
-                anyRemoved = true;
+                if (_pinStates[stale] == MarkState.Circled)
+                    _pendingCircled.Add(stale.m_pos);
+                DropPinState(stale);
             }
+        }
 
-            if (anyRemoved)
+        // Gracz sam usunal pin z mapy - oznaczenie znika razem z nim.
+        private void ForgetPin(Minimap.PinData pin)
+        {
+            if (!_pinStates.TryGetValue(pin, out var state))
+                return;
+            DropPinState(pin);
+            if (state == MarkState.Circled)
                 SaveTrackedPins();
+        }
+
+        private void DropPinState(Minimap.PinData pin)
+        {
+            _pinStates.Remove(pin);
+            if (_overlayByPin.TryGetValue(pin, out var overlay))
+            {
+                if (overlay != null) Destroy(overlay);
+                _overlayByPin.Remove(pin);
+            }
+        }
+
+        private void MarkCircled(Minimap.PinData pin)
+        {
+            if (_pinStates.TryGetValue(pin, out var state) && state == MarkState.Circled)
+                return;
+            _pinStates[pin] = MarkState.Circled;
+            pin.m_checked = false; // Circled = bez wbudowanego przekreslenia
+            var overlay = CreateRingOverlay(pin);
+            if (overlay != null) _overlayByPin[pin] = overlay;
+        }
+
+        // Dopasowuje czekajace oznaczenia do pinow na mapie. Po wejsciu do swiata inne mody (np.
+        // Auto Waypoints) dodaja swoje piny pozniej niz gra, a schowany pin wraca na mape jako
+        // nowy obiekt w tym samym miejscu - dlatego nie tylko raz przy wczytaniu.
+        private void ResolvePendingPins()
+        {
+            if (_pendingCircled.Count == 0 || Time.time < _nextPendingResolve)
+                return;
+            _nextPendingResolve = Time.time + PendingResolveInterval;
+
+            var pins = PinsField.GetValue(Minimap.instance) as List<Minimap.PinData>;
+            if (pins == null)
+                return;
+            for (int i = _pendingCircled.Count - 1; i >= 0; i--)
+            {
+                var pos = _pendingCircled[i];
+                var match = pins.FirstOrDefault(p => Vector3.Distance(p.m_pos, pos) < PositionMatchTolerance);
+                if (match == null)
+                    continue;
+                _pendingCircled.RemoveAt(i);
+                MarkCircled(match);
+                Log.LogInfo($"Oznaczony pin '{match.m_name}' jest na mapie.");
+            }
         }
 
         // dopina/odtwarza pierscienie, jesli gra w miedzyczasie przebudowala UI pinow na mapie
@@ -329,7 +401,10 @@ namespace NavCompass
 
         // ---------- zapis / odczyt oznaczen (per swiat) ----------
 
-        private static string SaveDir => Path.GetDirectoryName(typeof(NavCompassPlugin).Assembly.Location);
+        // Zapis w BepInEx/config/NavCompass, a nie obok DLL: menedzery modow (r2modman) przy kazdej
+        // aktualizacji kasuja caly folder pluginu.
+        private static string _saveDir;
+        private static string SaveDir => _saveDir ??= Directory.CreateDirectory(Path.Combine(Paths.ConfigPath, "NavCompass")).FullName;
 
         private static string SaveFilePath(string worldName)
         {
@@ -345,7 +420,7 @@ namespace NavCompass
                 if (string.IsNullOrEmpty(worldName))
                     return;
 
-                var data = new TrackedPinsSaveData { positions = CircledPins.Select(p => p.m_pos).ToList() };
+                var data = new TrackedPinsSaveData { positions = CircledPins.Select(p => p.m_pos).Concat(_pendingCircled).ToList() };
                 File.WriteAllText(SaveFilePath(worldName), JsonUtility.ToJson(data));
             }
             catch (Exception e)
@@ -354,28 +429,34 @@ namespace NavCompass
             }
         }
 
-        // Do wersji 0.1.x DLL nazywal sie "Mod6-NavCompass" i lezal w takim folderze pluginow -
-        // zapis zaznaczen jest obok DLL, wiec po zmianie nazwy przenosimy go jednorazowo.
+        // Starsze miejsca zapisu, od najnowszego: do wersji 1.0.0 zapis lezal obok DLL, a do 0.1.x
+        // DLL nazywal sie "Mod6-NavCompass" i lezal w takim folderze pluginow.
         private const string LegacyPluginFolder = "Mod6-NavCompass";
 
+        private static IEnumerable<string> LegacySaveDirs()
+        {
+            yield return Path.GetDirectoryName(typeof(NavCompassPlugin).Assembly.Location);
+            yield return Path.Combine(Paths.PluginPath, LegacyPluginFolder);
+        }
+
+        // Jednorazowo kopiuje zapis ze starego miejsca, dopoki w nowym go nie ma.
         private static void MigrateLegacySaveFile(string path)
         {
             if (File.Exists(path))
                 return;
-            string pluginsDir = Path.GetDirectoryName(SaveDir);
-            if (pluginsDir == null)
-                return;
-            string legacyPath = Path.Combine(pluginsDir, LegacyPluginFolder, Path.GetFileName(path));
-            if (!File.Exists(legacyPath) || string.Equals(Path.GetFullPath(legacyPath), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+            string legacyPath = LegacySaveDirs()
+                .Select(dir => Path.Combine(dir, Path.GetFileName(path)))
+                .FirstOrDefault(File.Exists);
+            if (legacyPath == null)
                 return;
             try
             {
                 File.Copy(legacyPath, path);
-                Log.LogInfo($"Przeniesiono zaznaczone piny ze starego folderu: {legacyPath} -> {path}");
+                Log.LogInfo($"Przeniesiono zaznaczone piny ze starego miejsca: {legacyPath} -> {path}");
             }
             catch (Exception e)
             {
-                Log.LogWarning($"Nie udalo sie przeniesc zaznaczen ze starego folderu ({legacyPath}): {e}");
+                Log.LogWarning($"Nie udalo sie przeniesc zaznaczen ze starego miejsca ({legacyPath}): {e}");
             }
         }
 
@@ -388,6 +469,11 @@ namespace NavCompass
             _currentWorldName = worldName;
             _savedStateLoaded = true;
 
+            // Stan poprzedniego swiata nie przechodzi do nowego (jego piny juz nie istnieja).
+            foreach (var pin in _pinStates.Keys.ToList())
+                DropPinState(pin);
+            _pendingCircled.Clear();
+
             string path = SaveFilePath(worldName);
             MigrateLegacySaveFile(path);
             if (!File.Exists(path))
@@ -396,25 +482,14 @@ namespace NavCompass
             try
             {
                 var data = JsonUtility.FromJson<TrackedPinsSaveData>(File.ReadAllText(path));
-                var pins = PinsField.GetValue(Minimap.instance) as List<Minimap.PinData>;
-                if (data?.positions == null || pins == null)
+                if (data?.positions == null)
                     return;
 
-                int loaded = 0;
-                foreach (var savedPos in data.positions)
-                {
-                    var match = pins.FirstOrDefault(p => Vector3.Distance(p.m_pos, savedPos) < PositionMatchTolerance);
-                    if (match != null && (!_pinStates.TryGetValue(match, out var st) || st != MarkState.Circled))
-                    {
-                        _pinStates[match] = MarkState.Circled;
-                        match.m_checked = false; // Circled = bez wbudowanego przekreslenia
-                        var overlay = CreateRingOverlay(match);
-                        if (overlay != null) _overlayByPin[match] = overlay;
-                        loaded++;
-                    }
-                }
-
-                Log.LogInfo($"Wczytano {loaded} oznaczonych pinow dla swiata '{worldName}'.");
+                _pendingCircled.AddRange(data.positions);
+                _nextPendingResolve = 0f;
+                ResolvePendingPins();
+                Log.LogInfo($"Wczytano {data.positions.Count} oznaczonych pinow dla swiata '{worldName}' " +
+                            $"({_pendingCircled.Count} czeka na swoj pin na mapie).");
             }
             catch (Exception e)
             {
@@ -645,6 +720,7 @@ namespace NavCompass
             }
 
             RemoveDeletedPins();
+            ResolvePendingPins();
 
             var circledNow = CircledPins.ToList();
 
