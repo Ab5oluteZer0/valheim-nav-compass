@@ -1,0 +1,57 @@
+name: Publish to Thunderstore
+
+# Po wydaniu nowej wersji na GitHubie pakuje DLL z tego wydania i publikuje go na
+# Thunderstore. Mozna tez uruchomic recznie dla istniejacego tagu.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v1.0.0)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      # Konfiguracja paczki z galezi glownej, DLL z wydania - gra nie jest dostepna w CI,
+      # wiec nie budujemy tu kodu, tylko publikujemy to, co zostalo wydane.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Download release DLL
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$TAG" --pattern "*.dll" --dir thunderstore/dist
+
+      - name: README with absolute links
+        run: |
+          python3 - <<'EOF'
+          import os, re
+          base = "https://github.com/" + os.environ["GITHUB_REPOSITORY"]
+          text = open("README.md", encoding="utf-8").read()
+          def fix(m):
+              url = m.group(1)
+              if re.match(r"[a-z]+:|#", url):
+                  return m.group(0)
+              if url.startswith("../../"):
+                  return "](" + base + "/" + url[6:] + ")"
+              return "](" + base + "/blob/HEAD/" + url + ")"
+          open("thunderstore/README.md", "w", encoding="utf-8").write(re.sub(r"\]\(([^)]+)\)", fix, text))
+          EOF
+
+      - name: Install Thunderstore CLI
+        run: dotnet tool install --global tcli --version 0.2.4
+
+      - name: Publish
+        working-directory: thunderstore
+        env:
+          TCLI_AUTH_TOKEN: ${{ secrets.THUNDERSTORE_TOKEN }}
+        run: tcli publish --package-version "${TAG#v}"

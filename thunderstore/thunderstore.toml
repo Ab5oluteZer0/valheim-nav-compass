@@ -1,0 +1,31 @@
+[config]
+schemaVersion = "0.0.1"
+
+[package]
+namespace = "Ab5oluteZer0"
+name = "NavCompass"
+# Nadpisywane numerem z tagu wydania przy publikacji (workflow thunderstore.yml).
+versionNumber = "1.0.0"
+description = "Game-styled HUD compass strip showing directions and the bearing and distance to map pins you mark."
+websiteUrl = "https://github.com/Ab5oluteZer0/valheim-nav-compass"
+containsNsfwContent = false
+
+[package.dependencies]
+"denikson-BepInExPack_Valheim" = "5.4.2351"
+
+[build]
+icon = "./icon.png"
+readme = "./README.md"
+outdir = "./build"
+
+[[build.copy]]
+source = "./dist"
+target = ""
+
+[publish]
+repository = "https://thunderstore.io"
+communities = ["valheim"]
+
+[publish.categories]
+# "ai-generated": zasada Thunderstore dla paczek, ktorych kod powstal z pomoca AI.
+valheim = ["mods", "utility", "client-side", "ai-generated"]
