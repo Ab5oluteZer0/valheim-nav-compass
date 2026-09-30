@@ -49,6 +49,9 @@ jobs:
           open("thunderstore/README.md", "w", encoding="utf-8").write(re.sub(r"(!?)(\[[^\]]*\])\(([^)]+)\)", fix, text))
           EOF
 
+      - name: Changelog
+        run: cp CHANGELOG.md thunderstore/CHANGELOG.md
+
       - name: Install Thunderstore CLI
         run: dotnet tool install --global tcli --version 0.2.4
 

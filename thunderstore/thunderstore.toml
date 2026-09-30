@@ -22,6 +22,11 @@ outdir = "./build"
 source = "./dist"
 target = ""
 
+# Zakladka "Changelog" na Thunderstore (plik kopiuje workflow z katalogu repo).
+[[build.copy]]
+source = "./CHANGELOG.md"
+target = "CHANGELOG.md"
+
 [publish]
 repository = "https://thunderstore.io"
 communities = ["valheim"]
