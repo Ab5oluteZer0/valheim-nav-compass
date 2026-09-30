@@ -28,9 +28,9 @@ namespace NavCompass
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
     public class NavCompassPlugin : BaseUnityPlugin
     {
-        public const string PluginGUID = "com.michal.valheim.navcompass";
+        public const string PluginGUID = "com.ab5olutezer0.valheim.navcompass";
         public const string PluginName = "Nav Compass";
-        public const string PluginVersion = "1.0.3";
+        public const string PluginVersion = "1.0.4";
 
         private const float StripWidth = 480f;
         // Wysokosc miesci ikone sledzonego pinu i pod nia napis (nazwa + dystans).
@@ -779,7 +779,9 @@ namespace NavCompass
         // widoczny na mapie. O podpisach pinow Auto Waypoints decyduje tamten mod - pytany przez
         // jego publiczna metode IsPinLabelVisible, znaleziona przez Chainloader i refleksje, zeby
         // kompas dzialal tez bez niego (wtedy nazwa jest pokazywana zawsze, gdy pin ja ma).
-        private const string AutoWaypointsGuid = "com.michal.valheim.autowaypoints";
+        // Auto Waypoints do 1.0.6 mial identyfikator "com.michal..." - obsluga obu wersji.
+        private static readonly string[] AutoWaypointsGuids =
+            { "com.ab5olutezer0.valheim.autowaypoints", "com.michal.valheim.autowaypoints" };
         private Func<Minimap.PinData, bool> _isPinLabelVisible;
         private bool _labelVisibilityResolved;
 
@@ -800,7 +802,10 @@ namespace NavCompass
 
         private static Func<Minimap.PinData, bool> ResolveLabelVisibility()
         {
-            if (!BepInEx.Bootstrap.Chainloader.PluginInfos.TryGetValue(AutoWaypointsGuid, out var info) || info.Instance == null)
+            var info = AutoWaypointsGuids
+                .Select(guid => BepInEx.Bootstrap.Chainloader.PluginInfos.TryGetValue(guid, out var found) ? found : null)
+                .FirstOrDefault(found => found?.Instance != null);
+            if (info == null)
                 return null;
             var method = info.Instance.GetType().GetMethod("IsPinLabelVisible", BindingFlags.Public | BindingFlags.Instance,
                 null, new[] { typeof(Minimap.PinData) }, null);

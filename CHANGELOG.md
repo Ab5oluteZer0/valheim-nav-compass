@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.4
+- Mod ID changed from `com.michal...` to `com.ab5olutezer0...`. No gameplay changes.
+- Works with both the old and the new Auto Waypoints.
+
 ## 1.0.3
 - Bug fix: tracked pins were shared between characters. Now every character has its own.
 
